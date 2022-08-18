@@ -102,6 +102,8 @@ static void create_section_info(sec_info_t **sec, unsigned int sec_cnt, FILE *fd
 					Elf32_Shdr sh;
 					fread((void *)&sh, 1, sizeof(Elf32_Shdr), fd);
 					name_len = strlen((char*)(buff + sh.sh_name));
+					if(!name_len)
+						continue;
 					sec[i]->name = malloc(name_len);
 					strcpy(sec[i]->name, (char*)(buff + sh.sh_name));
 				}
@@ -157,10 +159,14 @@ static void create_section_info(sec_info_t **sec, unsigned int sec_cnt, FILE *fd
 
 static void destroy_section_info(sec_info_t **sec, unsigned int sec_cnt)
 {
+	if(!sec)
+		return;
 	for(int i = 0; i < sec_cnt; i++)
 	{
-		free(sec[i]->name);
-		free(sec[i]);
+		if(sec[i]->name)
+			free(sec[i]->name);
+		if(sec[i])
+			free(sec[i]);
 	}
 	free(sec);
 }
@@ -179,11 +185,11 @@ static void print_sections_info(sec_info_t **sec, unsigned int n_sec)
 	{
 		if(!sec[i]->flags)
 			continue;
-		char *temp = sec[i]->type & SHT_PROGBITS ? "*" : "";
+		char temp = sec[i]->type & SHT_PROGBITS ? '*' : 0;
 		if(sec[i]->type & SHT_PROGBITS)
 			bin_size += sec[i]->size;
 		++cntr;
-		printf("%3d) %20s\t0x%08lx\t%10lu B\t%3s\n", cntr, sec[i]->name, sec[i]->vma, sec[i]->size, temp);
+		printf("%3d) %20s\t0x%08lx\t%10lu B\t%3c\n", cntr, sec[i]->name, sec[i]->vma, sec[i]->size, temp);
 	}
 	for(int i = 0; i < 70; i++)
 		printf("=");
