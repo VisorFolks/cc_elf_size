@@ -79,6 +79,7 @@ static void create_section_info(sec_info_t **sec, unsigned int sec_cnt, FILE *fd
 				{
 					Elf32_Shdr sh;
 					sec[i] = (sec_info_t *)malloc(sizeof(sec_info_t));
+					memset(sec[i], 0, sizeof(sec_info_t));
 					fread((void *)&sh, 1, sizeof(Elf32_Shdr), fd);
 					sec[i]->size = sh.sh_size;
 					sec[i]->vma = sh.sh_addr;
@@ -107,7 +108,6 @@ static void create_section_info(sec_info_t **sec, unsigned int sec_cnt, FILE *fd
 					sec[i]->name = malloc(name_len);
 					strcpy(sec[i]->name, (char*)(buff + sh.sh_name));
 				}
-				free(buff);
 			}
 			break;
 		case ELFCLASS64:
@@ -123,6 +123,7 @@ static void create_section_info(sec_info_t **sec, unsigned int sec_cnt, FILE *fd
 				{
 					Elf32_Shdr sh;
 					sec[i] = (sec_info_t *)malloc(sizeof(sec_info_t));
+					memset(sec[i], 0, sizeof(sec_info_t));
 					fread((void *)&sh, 1, sizeof(Elf64_Shdr), fd);
 					sec[i]->size = sh.sh_size;
 					sec[i]->vma = sh.sh_addr;
@@ -149,12 +150,12 @@ static void create_section_info(sec_info_t **sec, unsigned int sec_cnt, FILE *fd
 					sec[i]->name = malloc(name_len);
 					strcpy(sec[i]->name, (char*)(buff + sh.sh_name));
 				}
-				free(buff);
 			}
 			break;
 		default:
 			sec_cnt = -1;
 	}
+	free(buff);
 }
 
 static void destroy_section_info(sec_info_t **sec, unsigned int sec_cnt)
@@ -163,10 +164,12 @@ static void destroy_section_info(sec_info_t **sec, unsigned int sec_cnt)
 		return;
 	for(int i = 0; i < sec_cnt; i++)
 	{
-		if(sec[i]->name)
-			free(sec[i]->name);
 		if(sec[i])
+		{
+			if(sec[i]->name)
+				free(sec[i]->name);
 			free(sec[i]);
+		}
 	}
 	free(sec);
 }
