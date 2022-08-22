@@ -1,3 +1,14 @@
+/*
+ * CYANCORE LICENSE
+ * Copyrights (C) <2022>, Cyancore Team
+ *
+ * File Name		: elf_size.c
+ * Description		: This is a source files for generating custom utiliy
+ *			  to compute elf section sizes and memory regions
+ * Primary Author	: Akash Kollipara [akashkollipara@gmail.com]
+ * Organisation		: VisorFolks
+ */
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -5,7 +16,15 @@
 #include <errno.h>
 #include <elf.h>
 
-static bool details;
+static char *size_help =
+"Usage : ./size -f <file> -m <name start_addr size> -m <name start_addr size> ...\n\n"
+"Options :\n"
+"-m: Memory zones, multiple memory zones can be passed. There are 4 keywords for flash or rom,\n"
+"    -m with 'Flash', 'flash', 'ROM', 'rom' will be used to compute the size of binary.\n"
+"-f: File, only latest of -f files will be processed.\n"
+"Example :\n"
+"$ ./size -f a.out -m Flash 0x1000 0x200 -m RAM 0x80000000 0x100\n";
+
 typedef struct section_info
 {
 	char *name;
@@ -15,6 +34,22 @@ typedef struct section_info
 	uint32_t type;
 	uint32_t align;
 } sec_info_t;
+
+typedef struct memzone
+{
+	char *name;
+	uint64_t saddr;
+	uint64_t eaddr;
+	size_t size;
+} mz_t;
+
+static uint64_t strtonum(char *i)
+{
+	if(i[0] == '0' && i[1] == 'x')
+		return strtol(i, NULL, 0);
+	else
+		return strtol(i, NULL, 10);
+}
 
 static bool isELF(FILE *fd)
 {
@@ -174,7 +209,7 @@ static void destroy_section_info(sec_info_t **sec, unsigned int sec_cnt)
 	free(sec);
 }
 
-static void print_sections_info(sec_info_t **sec, unsigned int n_sec)
+static void print_sections_info(sec_info_t **sec, unsigned int n_sec, mz_t **mz, int mcnt)
 {
 	int cntr = 0;
 	size_t bin_size = 0;
@@ -197,27 +232,64 @@ static void print_sections_info(sec_info_t **sec, unsigned int n_sec)
 	for(int i = 0; i < 70; i++)
 		printf("=");
 	printf("\nTotal Size of bin file = %lu Bytes\n", bin_size);
+
+	if(mz && mcnt)
+	{
+		size_t size;
+		int pc;
+		for(int m = 0; m < mcnt; m++)
+		{
+			size = 0;
+			printf("%6s Usage : ", mz[m]->name);
+			if(!strcmp(mz[m]->name, "ROM") || !strcmp(mz[m]->name, "Flash") ||
+			   !strcmp(mz[m]->name, "rom") || !strcmp(mz[m]->name, "flash"))
+			{
+				size = bin_size;
+			   	goto skip_compute_size;
+			}
+			for(int i = 0; i < n_sec; i++)
+				if(sec[i]->vma >= mz[m]->saddr && sec[i]->vma < mz[m]->eaddr)
+					size += sec[i]->size;
+skip_compute_size:
+			pc = size * 100 / mz[m]->size;
+			printf("[");
+			for(int i = 0; i < 40; i ++)
+				printf("%c", (i < (int)((float)pc/2.5) ? '=':' '));
+			printf("] %3u%%, %lu / %lu B\n", pc, size, mz[m]->size);
+
+		}
+	}
 }
 
 int main(int argc, char *argv[])
 {
-	int ret = 0;
-	FILE *fd;
+	int ret = 0, mem_cnt = 0;
+	char *fname;
+	FILE *fd = NULL;
+	mz_t **mz = NULL;
 
-	if(argc < 2)
+	if(argc < 3)
+		goto usage_exit;
+
+	for(int i = 1; i < argc; i++)
 	{
-		printf("< ! > Usage: size <elf file> [-d]\n");
-		ret = 0;
-		goto exit;
-	}
-	else if(argc > 2)
-		if(!strcmp(argv[2], "-d"))
+		if(!strcmp(argv[i], "-f"))
+			fname = argv[++i];
+		else if(!strcmp(argv[i], "-m"))
 		{
-			details = true;
-			printf("Details\n");
+			if(argc - i <= 3)
+				goto usage_exit;
+			mem_cnt ++;
+			mz = (mz_t **)realloc(mz, (sizeof(mz_t *)*mem_cnt));
+			mz[mem_cnt - 1] = (mz_t *)malloc(sizeof(mz_t));
+			mz[mem_cnt - 1]->name = argv[++i];
+			mz[mem_cnt - 1]->saddr = strtonum(argv[++i]);
+			mz[mem_cnt - 1]->size = strtonum(argv[++i]);
+			mz[mem_cnt - 1]->eaddr = mz[mem_cnt - 1]->saddr + mz[mem_cnt - 1]->size;
 		}
+	}
 
-	fd = fopen(argv[1], "r");
+	fd = fopen(fname, "r");
 	if(!fd)
 	{
 		printf("< x > Failed to open %s\n", argv[1]);
@@ -240,10 +312,18 @@ int main(int argc, char *argv[])
 		goto exit;
 	}
 	create_section_info(sec, n_sec, fd);
-	printf("Size of %s\n", argv[1]);
-	print_sections_info(sec, n_sec);
-	destroy_section_info(sec, n_sec);
+	printf("Size of %s\n", fname);
+	print_sections_info(sec, n_sec, mz, mem_cnt);
+	goto exit;
+usage_exit:
+	printf("%s", size_help);
 exit:
+	destroy_section_info(sec, n_sec);
+	for(int i = 0; i < mem_cnt; i++)
+		if(mz[i])
+			free(mz[i]);
+	if(mz)
+		free(mz);
 	if(fd)
 		fclose(fd);
 	return ret;
