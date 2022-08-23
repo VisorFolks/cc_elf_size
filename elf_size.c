@@ -156,7 +156,7 @@ static void create_section_info(sec_info_t **sec, unsigned int sec_cnt, FILE *fd
 				fseek(fd, sec_offset, SEEK_SET);
 				for(int i = 0; i < sec_cnt; i++)
 				{
-					Elf32_Shdr sh;
+					Elf64_Shdr sh;
 					sec[i] = (sec_info_t *)malloc(sizeof(sec_info_t));
 					memset(sec[i], 0, sizeof(sec_info_t));
 					fread((void *)&sh, 1, sizeof(Elf64_Shdr), fd);
@@ -263,10 +263,11 @@ skip_compute_size:
 
 int main(int argc, char *argv[])
 {
-	int ret = 0, mem_cnt = 0;
+	int ret = 0, mem_cnt = 0, n_sec = 0;
 	char *fname;
 	FILE *fd = NULL;
 	mz_t **mz = NULL;
+	sec_info_t **sec = NULL;
 
 	if(argc < 3)
 		goto usage_exit;
@@ -304,8 +305,8 @@ int main(int argc, char *argv[])
 		goto exit;	// Replace with correct errno
 	}
 
-	int n_sec = get_section_count(fd);
-	sec_info_t **sec = (sec_info_t **)calloc(n_sec, sizeof(sec_info_t *));
+	n_sec = get_section_count(fd);
+	sec = (sec_info_t **)calloc(n_sec, sizeof(sec_info_t *));
 	if(!sec)
 	{
 		ret = -ENOMEM;
@@ -319,11 +320,13 @@ usage_exit:
 	printf("%s", size_help);
 exit:
 	destroy_section_info(sec, n_sec);
-	for(int i = 0; i < mem_cnt; i++)
-		if(mz[i])
-			free(mz[i]);
-	if(mz)
+	if(mz && mem_cnt)
+	{
+		for(int i = 0; i < mem_cnt; i++)
+			if(mz[i])
+				free(mz[i]);
 		free(mz);
+	}
 	if(fd)
 		fclose(fd);
 	return ret;
